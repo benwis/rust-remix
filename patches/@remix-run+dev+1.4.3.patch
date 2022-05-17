@@ -1,5 +1,5 @@
 diff --git a/node_modules/@remix-run/dev/compiler.js b/node_modules/@remix-run/dev/compiler.js
-index 902b251..25ef6c5 100644
+index 902b251..a8ff31f 100644
 --- a/node_modules/@remix-run/dev/compiler.js
 +++ b/node_modules/@remix-run/dev/compiler.js
 @@ -28,6 +28,7 @@ var loaders = require('./compiler/loaders.js');
@@ -45,11 +45,18 @@ index 902b251..25ef6c5 100644
      if (file.path.endsWith(".js")) {
        // fix sourceMappingURL to be relative to current path instead of /build
        let filename = file.path.substring(file.path.lastIndexOf(path__namespace.sep) + 1);
-@@ -431,6 +433,9 @@ async function writeServerBuildResult(config, outputFiles) {
+@@ -431,6 +433,16 @@ async function writeServerBuildResult(config, outputFiles) {
        let contents = Buffer.from(file.contents).toString("utf-8");
        contents = contents.replace(/"route:/gm, '"');
        await fse__namespace.writeFile(file.path, contents);
 +    } else if (file.path.endsWith(".node")){
++       // Check for and make _assets folder if it does not exist in the directory
++           // I suspect this is usually done elsewhere
++           let parentFolderPath = file.path.slice(0,file.path.lastIndexOf("/"))
++         if (!fse.existsSync(parentFolderPath)){     
++             fse.mkdirSync(parentFolderPath, {recursive: true });
++          }
++      
 +      // Write the binary .node file to the same path and with the same contents as expected
 +      await fse__namespace.writeFile(file.path, file.contents)
      }
