@@ -6,7 +6,6 @@ One of the best ways to do that is to use Node's FFI interface through napi-rs, 
 
 This repo contains changes to the Remix compiler to add support for native .node files, which get included in your server bundle. This could probably can't run on the client, so it's to be used in loaders/actions only.
 
-Currently the .node files are generated, but not correctly imported into Remix somehow.
 ## Example
 
 This example uses Rust compiled to WASM.
