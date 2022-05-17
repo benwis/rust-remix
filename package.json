@@ -1,0 +1,35 @@
+{
+  "name": "remix-example-rust",
+  "private": true,
+  "description": "",
+  "license": "",
+  "sideEffects": false,
+  "scripts": {
+    "build": "remix build",
+    "predev": "wasm-pack build rust-functions --target nodejs --out-name rust-functions",
+    "dev": "remix dev",
+    "start": "remix-serve build",
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "@remix-run/node": "1.4.3",
+    "@remix-run/react": "1.4.3",
+    "@remix-run/serve": "1.4.3",
+    "napi-rust-functions": "file:napi-rust-functions",
+    "react": "^18.1.0",
+    "react-dom": "^18.1.0",
+    "rust-functions": "file:rust-functions/pkg"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "1.4.3",
+    "@remix-run/eslint-config": "1.4.3",
+    "@types/react": "^18.0.9",
+    "@types/react-dom": "^18.0.4",
+    "eslint": "^8.15.0",
+    "patch-package": "^6.4.7",
+    "typescript": "^4.6.4"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

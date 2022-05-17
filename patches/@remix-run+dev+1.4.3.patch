@@ -1,0 +1,137 @@
+diff --git a/node_modules/@remix-run/dev/compiler.js b/node_modules/@remix-run/dev/compiler.js
+index 902b251..25ef6c5 100644
+--- a/node_modules/@remix-run/dev/compiler.js
++++ b/node_modules/@remix-run/dev/compiler.js
+@@ -28,6 +28,7 @@ var loaders = require('./compiler/loaders.js');
+ var browserRouteModulesPlugin = require('./compiler/plugins/browserRouteModulesPlugin.js');
+ var emptyModulesPlugin = require('./compiler/plugins/emptyModulesPlugin.js');
+ var mdx = require('./compiler/plugins/mdx.js');
++var nativeNodeModules = require('./compiler/plugins/nativeNodeModules.js');
+ var serverAssetsManifestPlugin = require('./compiler/plugins/serverAssetsManifestPlugin.js');
+ var serverBareModulesPlugin = require('./compiler/plugins/serverBareModulesPlugin.js');
+ var serverEntryModulePlugin = require('./compiler/plugins/serverEntryModulePlugin.js');
+@@ -307,7 +308,7 @@ async function createBrowserBuild(config, options) {
+     entryPoints[id] = path__namespace.resolve(config.appDirectory, config.routes[id].file) + "?browser";
+   }
+ 
+-  let plugins = [mdx.mdxPlugin(config), browserRouteModulesPlugin.browserRouteModulesPlugin(config, /\?browser$/), emptyModulesPlugin.emptyModulesPlugin(config, /\.server(\.[jt]sx?)?$/), nodeModulesPolyfill.NodeModulesPolyfillPlugin()];
++  let plugins = [mdx.mdxPlugin(config), browserRouteModulesPlugin.browserRouteModulesPlugin(config, /\?browser$/), emptyModulesPlugin.emptyModulesPlugin(config, /\.server(\.[jt]sx?)?$/), nodeModulesPolyfill.NodeModulesPolyfillPlugin(), nativeNodeModules.nativeNodeModulesPlugin()];
+ 
+   if (config.serverBuildTarget === "deno") {
+     // @ts-expect-error
+@@ -365,7 +366,7 @@ function createServerBuild(config, options, assetsManifestPromiseRef) {
+   }
+ 
+   let isCloudflareRuntime = ["cloudflare-pages", "cloudflare-workers"].includes(config.serverBuildTarget ?? "");
+-  let plugins = [mdx.mdxPlugin(config), emptyModulesPlugin.emptyModulesPlugin(config, /\.client(\.[jt]sx?)?$/), serverRouteModulesPlugin.serverRouteModulesPlugin(config), serverEntryModulePlugin.serverEntryModulePlugin(config), serverAssetsManifestPlugin.serverAssetsManifestPlugin(assetsManifestPromiseRef), serverBareModulesPlugin.serverBareModulesPlugin(config, dependencies$1, options.onWarning)];
++  let plugins = [mdx.mdxPlugin(config),emptyModulesPlugin.emptyModulesPlugin(config, /\.client(\.[jt]sx?)?$/), serverRouteModulesPlugin.serverRouteModulesPlugin(config), serverEntryModulePlugin.serverEntryModulePlugin(config), serverAssetsManifestPlugin.serverAssetsManifestPlugin(assetsManifestPromiseRef), nativeNodeModules.nativeNodeModulesPlugin(), serverBareModulesPlugin.serverBareModulesPlugin(config, dependencies$1, options.onWarning)];
+ 
+   if (config.serverPlatform !== "node") {
+     plugins.unshift(nodeModulesPolyfill.NodeModulesPolyfillPlugin());
+@@ -387,7 +388,7 @@ function createServerBuild(config, options, assetsManifestPromiseRef) {
+     inject: config.serverBuildTarget === "deno" ? [] : [reactShim],
+     loader: loaders.loaders,
+     bundle: true,
+-    logLevel: "silent",
++    // logLevel: "silent",
+     incremental: options.incremental,
+     sourcemap: options.sourcemap,
+     // use linked (true) to fix up .map file
+@@ -418,6 +419,7 @@ async function writeServerBuildResult(config, outputFiles) {
+   await fse__namespace.ensureDir(path__namespace.dirname(config.serverBuildPath));
+ 
+   for (let file of outputFiles) {
++    console.log(`File: ${JSON.stringify(file.path)}`);
+     if (file.path.endsWith(".js")) {
+       // fix sourceMappingURL to be relative to current path instead of /build
+       let filename = file.path.substring(file.path.lastIndexOf(path__namespace.sep) + 1);
+@@ -431,6 +433,9 @@ async function writeServerBuildResult(config, outputFiles) {
+       let contents = Buffer.from(file.contents).toString("utf-8");
+       contents = contents.replace(/"route:/gm, '"');
+       await fse__namespace.writeFile(file.path, contents);
++    } else if (file.path.endsWith(".node")){
++      // Write the binary .node file to the same path and with the same contents as expected
++      await fse__namespace.writeFile(file.path, file.contents)
+     }
+   }
+ }
+diff --git a/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts
+new file mode 100644
+index 0000000..d51dc9b
+--- /dev/null
++++ b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts
+@@ -0,0 +1,2 @@
++import type { Plugin } from "esbuild";
++export declare function nativeNodeModulesPlugin(): Plugin;
+\ No newline at end of file
+diff --git a/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js
+new file mode 100644
+index 0000000..be34f5a
+--- /dev/null
++++ b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js
+@@ -0,0 +1,65 @@
++/**
++ * @remix-run/dev v1.4.3
++ *
++ * Copyright (c) Remix Software Inc.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE.md file in the root directory of this source tree.
++ *
++ * @license MIT
++ */
++'use strict';
++
++Object.defineProperty(exports, '__esModule', { value: true });
++
++function nativeNodeModulesPlugin() {
++  return {
++    name: "native-node-modules",
++
++    setup(build) {
++      // If a ".node" file is imported within a module in the "file" namespace, resolve
++      // it to an absolute path and put it into the "node-file" virtual namespace.
++      build.onResolve({
++        filter: /\.node$/,
++        namespace: "file"
++      }, args => ({
++        path: require.resolve(args.path, {
++          paths: [args.resolveDir]
++        }),
++        namespace: "node-file"
++      })); // Files in the "node-file" virtual namespace call "require()" on the
++      // path from esbuild of the ".node" file in the output directory.
++
++      build.onLoad({
++        filter: /.*/,
++        namespace: "node-file"
++      }, args => ({
++        contents: `
++        import path from ${JSON.stringify(args.path)}
++        try { module.exports = require(path); console.log("SUCCESS")
++    }
++        catch (error) {
++            console.log("ERROR", error)
++        }
++      `
++      })); // If a ".node" file is imported within a module in the "node-file" namespace, put
++      // it in the "file" namespace where esbuild's default loading behavior will handle
++      // it. It is already an absolute path since we resolved it to one above.
++
++      build.onResolve({
++        filter: /\.node$/,
++        namespace: "node-file"
++      }, args => ({
++        path: args.path,
++        namespace: "file"
++      })); // Tell esbuild's default loading behavior to use the "file" loader for
++      // these ".node" files.
++
++      let opts = build.initialOptions;
++      opts.loader = opts.loader || {};
++      opts.loader[".node"] = "file";
++    }
++
++  };
++}
++exports.nativeNodeModulesPlugin = nativeNodeModulesPlugin;
