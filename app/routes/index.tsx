@@ -3,7 +3,7 @@ import { json } from "@remix-run/node";
 import { Form, useActionData } from "@remix-run/react";
 
 import { add } from "~/rust.server";
-import { napiAdd } from "~/rust.server";
+import { sum } from "~/rust.server";
 import indexStylesUrl from "~/styles/index.css";
 
 export function links() {
@@ -24,7 +24,7 @@ export const action: ActionFunction = async ({ request }) => {
       }
       else if (formData.get("napi")){
         console.log("Using NAPI")
-        result = napiAdd(Number(left_operand), Number(right_operand));
+        result = sum(Number(left_operand), Number(right_operand));
       }
       console.log("result", result);
       return json({

@@ -30,6 +30,6 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { napiAdd } = nativeBinding
+const { sum } = nativeBinding
 
-module.exports.napiAdd = napiAdd
+module.exports.sum = sum

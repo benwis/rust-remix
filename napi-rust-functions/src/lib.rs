@@ -4,6 +4,6 @@
 extern crate napi_derive;
 
 #[napi]
-fn napi_add(a: i32, b: i32) -> i32 {
+fn sum(a: i32, b: i32) -> i32 {
   a + b
 }

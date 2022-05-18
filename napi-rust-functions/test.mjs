@@ -1,3 +1,3 @@
-import { napiAdd } from './index.js'
+import { sum } from './index.js'
 
-console.log('From native', napiAdd(40, 2))
+console.log('From native', sum(40, 2))
