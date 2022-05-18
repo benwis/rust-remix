@@ -1,4 +1,5 @@
-# Rust Napi Sandbox
+# Rust <-> Remix Sandbox
+# _Now with both native Rust and WASM versions!_
 
 If you want to combine the **Web Fundamentals & Modern UX** of Remix together with the **Reliability, Performance & Efficiency** of Rust, you can use functions built with Rust on your server. Useful for intensive computations such as on the fly machine learning tasks, image processing, fibonacci etc.
 
