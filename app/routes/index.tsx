@@ -15,11 +15,17 @@ export const action: ActionFunction = async ({ request }) => {
   const { left_operand, operator, right_operand } =
     Object.fromEntries(formData);
   console.log(Object.fromEntries(formData));
+  let result = 0;
   switch (operator) {
     case "+":
-      console.log("typeof", typeof napiAdd);
-      console.log(napiAdd);
-      const result = napiAdd(Number(left_operand), Number(right_operand));
+      if (formData.get("wasm")){
+        console.log("Using WASM")
+        result = add(Number(left_operand), Number(right_operand));
+      }
+      else if (formData.get("napi")){
+        console.log("Using NAPI")
+        result = napiAdd(Number(left_operand), Number(right_operand));
+      }
       console.log("result", result);
       return json({
         result,
@@ -58,8 +64,11 @@ export default function Index() {
           id="right_operand"
           placeholder="2"
         />
-        <button className="submit" type="submit">
-          =
+        <button className="submit" name="wasm" value="wasm" type="submit">
+          = with WASM
+        </button>
+        <button className="submit" name="napi" value ="napi" type="submit">
+          = with N-API
         </button>
         <div className="result">{data?.result ? data?.result : ""}</div>
       </div>
