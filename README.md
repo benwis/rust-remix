@@ -89,10 +89,6 @@ _To prevent remix from including the rust-functions library in the client build 
 
 _This project includes patches to @remix-run/dev to support the .node add on. These should be automatically applied during the npm install step, but may become unecessary in the future._
 
-
-
-This will add the dependency to your `package.json` file.
-
 ## Related Links
 
 [Rust](https://rust-lang.org/)
