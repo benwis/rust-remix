@@ -4,7 +4,12 @@ import { Form, useActionData } from "@remix-run/react";
 
 import { add } from "~/rust.server";
 import { sum } from "~/rust.server";
+// import { wasmbin } from "~/rust.browser";
+// import {useState, useEffect} from "react";
+import init, {greet} from "../../browser-rust-functions/pkg/browser-rust-functions"
+import wasm from "../../browser-rust-functions/pkg/browser-rust-functions_bg.wasm"
 import indexStylesUrl from "~/styles/index.css";
+import { useEffect } from "react";
 
 export function links() {
   return [{ rel: "stylesheet", href: indexStylesUrl }];
@@ -40,6 +45,9 @@ export const action: ActionFunction = async ({ request }) => {
 
 export default function Index() {
   const data = useActionData();
+  useEffect(() => {
+      greet();
+  }, [])
 
   return (
     <Form className="form-container" method="post" replace>
