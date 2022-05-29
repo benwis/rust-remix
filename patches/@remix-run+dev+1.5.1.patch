@@ -1,0 +1,197 @@
+diff --git a/node_modules/@remix-run/dev/.DS_Store b/node_modules/@remix-run/dev/.DS_Store
+new file mode 100644
+index 0000000..4ee08af
+Binary files /dev/null and b/node_modules/@remix-run/dev/.DS_Store differ
+diff --git a/node_modules/@remix-run/dev/compiler.js b/node_modules/@remix-run/dev/compiler.js
+index f975b71..c830b67 100644
+--- a/node_modules/@remix-run/dev/compiler.js
++++ b/node_modules/@remix-run/dev/compiler.js
+@@ -19,6 +19,7 @@ var fse = require('fs-extra');
+ var debounce = require('lodash.debounce');
+ var chokidar = require('chokidar');
+ var nodeModulesPolyfill = require('@esbuild-plugins/node-modules-polyfill');
++
+ var build$1 = require('./build.js');
+ var config = require('./config.js');
+ var warnings = require('./compiler/warnings.js');
+@@ -28,14 +29,16 @@ var loaders = require('./compiler/loaders.js');
+ var browserRouteModulesPlugin = require('./compiler/plugins/browserRouteModulesPlugin.js');
+ var emptyModulesPlugin = require('./compiler/plugins/emptyModulesPlugin.js');
+ var mdx = require('./compiler/plugins/mdx.js');
++var nativeNodeModules = require('./compiler/plugins/nativeNodeModules.js');
+ var serverAssetsManifestPlugin = require('./compiler/plugins/serverAssetsManifestPlugin.js');
+ var serverBareModulesPlugin = require('./compiler/plugins/serverBareModulesPlugin.js');
+ var serverEntryModulePlugin = require('./compiler/plugins/serverEntryModulePlugin.js');
+ var serverRouteModulesPlugin = require('./compiler/plugins/serverRouteModulesPlugin.js');
++var nativeNodeModules = require('./compiler/plugins/nativeNodeModules.js');
+ var fs = require('./compiler/utils/fs.js');
+ var urlImportsPlugin = require('./compiler/plugins/urlImportsPlugin.js');
+ 
+-function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
++function _interopDefaultLegacy(e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+ 
+ function _interopNamespace(e) {
+   if (e && e.__esModule) return e;
+@@ -248,7 +251,7 @@ async function watch(config$1, {
+     }
+   });
+   return async () => {
+-    await watcher.close().catch(() => {});
++    await watcher.close().catch(() => { });
+     disposeBuilders();
+   };
+ }
+@@ -360,6 +363,9 @@ function createServerBuild(config, options, assetsManifestPromiseRef) {
+   if (config.serverPlatform !== "node") {
+     plugins.unshift(nodeModulesPolyfill.NodeModulesPolyfillPlugin());
+   }
++  if (config.serverPlatform == "node") {
++    plugins.unshift(nativeNodeModules.nativeNodeModulesPlugin());
++  }
+ 
+   return esbuild__namespace.build({
+     absWorkingDir: config.rootDirectory,
+@@ -421,6 +427,16 @@ async function writeServerBuildResult(config, outputFiles) {
+       let contents = Buffer.from(file.contents).toString("utf-8");
+       contents = contents.replace(/"route:/gm, '"');
+       await fse__namespace.writeFile(file.path, contents);
++    } else if (file.path.endsWith(".node")) {
++      // Check for and make _assets folder if it does not exist in the directory
++      // I suspect this is usually done elsewhere
++      let parentFolderPath = file.path.slice(0, file.path.lastIndexOf("/"))
++      if (!fse.existsSync(parentFolderPath)) {
++        fse.mkdirSync(parentFolderPath, { recursive: true });
++      }
++
++      // Write the binary .node file to the same path and with the same contents as expected
++      await fse__namespace.writeFile(file.path, file.contents)
+     }
+   }
+ }
+diff --git a/node_modules/@remix-run/dev/compiler/.DS_Store b/node_modules/@remix-run/dev/compiler/.DS_Store
+new file mode 100644
+index 0000000..23b6155
+Binary files /dev/null and b/node_modules/@remix-run/dev/compiler/.DS_Store differ
+diff --git a/node_modules/@remix-run/dev/compiler/loaders.js b/node_modules/@remix-run/dev/compiler/loaders.js
+index 99850a3..a5af2b4 100644
+--- a/node_modules/@remix-run/dev/compiler/loaders.js
++++ b/node_modules/@remix-run/dev/compiler/loaders.js
+@@ -59,6 +59,7 @@ const loaders = {
+   ".ts": "ts",
+   ".tsx": "tsx",
+   ".ttf": "file",
++  ".wasm": "file",
+   ".wav": "file",
+   ".webm": "file",
+   ".webmanifest": "file",
+diff --git a/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts
+new file mode 100644
+index 0000000..d51dc9b
+--- /dev/null
++++ b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.d.ts
+@@ -0,0 +1,2 @@
++import type { Plugin } from "esbuild";
++export declare function nativeNodeModulesPlugin(): Plugin;
+\ No newline at end of file
+diff --git a/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js
+new file mode 100644
+index 0000000..f5b1d05
+--- /dev/null
++++ b/node_modules/@remix-run/dev/compiler/plugins/nativeNodeModules.js
+@@ -0,0 +1,96 @@
++/**
++ * @remix-run/dev v1.4.3
++ *
++ * Copyright (c) Remix Software Inc.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE.md file in the root directory of this source tree.
++ *
++ * @license MIT
++ */
++'use strict';
++
++Object.defineProperty(exports, '__esModule', { value: true });
++var path = require('path');
++
++function _interopNamespace(e) {
++    if (e && e.__esModule) return e;
++    var n = Object.create(null);
++    if (e) {
++      Object.keys(e).forEach(function (k) {
++        if (k !== 'default') {
++          var d = Object.getOwnPropertyDescriptor(e, k);
++          Object.defineProperty(n, k, d.get ? d : {
++            enumerable: true,
++            get: function () { return e[k]; }
++          });
++        }
++      });
++    }
++    n["default"] = e;
++    return Object.freeze(n);
++  }
++
++var path__namespace = /*#__PURE__*/_interopNamespace(path);
++
++function nativeNodeModulesPlugin() {
++  return {
++    name: "native-node-modules",
++
++    setup(build) {
++      // If a ".node" file is imported within a module in the "file" namespace, resolve
++      // it to an absolute path and put it into the "node-file" virtual namespace.
++      build.onResolve({
++        filter: /\.node$/,
++        namespace: "file"
++      }, args => {
++        // Let's convert the path to an absolute path.
++        let resolved = path__namespace.resolve(args.resolveDir, args.path)
++      return (
++          {
++        path: resolved,
++        namespace: "node-file"
++      }
++      )}); // Files in the "node-file" virtual namespace call "require()" on the
++      // path from esbuild of the ".node" file in the output directory.
++
++      build.onLoad({
++        filter: /.*/,
++        namespace: "node-file"
++      }, args => {
++        let projectRoot = path.resolve();
++        return ({
++        contents: `
++        import * as path from "path";
++        import modulePath from ${JSON.stringify(args.path)}
++
++        let projectRoot = "${path__namespace.resolve()}";
++        let absolutePath = path.join(projectRoot, modulePath);
++
++        try { module.exports = require(absolutePath); 
++    }
++        catch (error) {
++            console.log("Node Module Loading Error:", error)
++        }
++      `
++      })}); // If a ".node" file is imported within a module in the "node-file" namespace, put
++      // it in the "file" namespace where esbuild's default loading behavior will handle
++      // it. It is already an absolute path since we resolved it to one above.
++
++      build.onResolve({
++        filter: /\.node$/,
++        namespace: "node-file"
++      }, args => ({
++        path: args.path,
++        namespace: "file"
++      })); // Tell esbuild's default loading behavior to use the "file" loader for
++      // these ".node" files.
++
++      let opts = build.initialOptions;
++      opts.loader = opts.loader || {};
++      opts.loader[".node"] = "file";
++    }
++
++  };
++}
++exports.nativeNodeModulesPlugin = nativeNodeModulesPlugin;

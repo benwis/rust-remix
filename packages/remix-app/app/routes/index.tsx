@@ -2,12 +2,9 @@ import type { ActionFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Form, useActionData } from "@remix-run/react";
 
-import { add } from "~/rust.server";
-import { sum } from "~/rust.server";
-// import { wasmbin } from "~/rust.browser";
-// import {useState, useEffect} from "react";
-import init, {greet} from "../../browser-rust-functions/pkg/browser-rust-functions"
-import wasm from "../../browser-rust-functions/pkg/browser-rust-functions_bg.wasm"
+import { add } from "rust_functions";
+import { sum } from "./rust.server"
+import { greet } from "../../../rust_functions/build/browser/rust_functions";
 import indexStylesUrl from "~/styles/index.css";
 import { useEffect } from "react";
 
