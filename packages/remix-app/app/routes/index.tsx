@@ -1,8 +1,8 @@
 import type { ActionFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData } from "@remix-run/react";
+import { Form, useActionData, useLoaderData } from "@remix-run/react";
 
-import { add } from "rust_functions";
+import { add, rust_wasm_loader } from "rust_functions";
 import { sum } from "./rust.server"
 import { greet } from "../../../rust_functions/build/browser/rust_functions";
 import indexStylesUrl from "~/styles/index.css";
@@ -11,6 +11,8 @@ import { useEffect } from "react";
 export function links() {
   return [{ rel: "stylesheet", href: indexStylesUrl }];
 }
+
+export const loader = rust_wasm_loader;
 
 export const action: ActionFunction = async ({ request }) => {
   const formData = await request.formData();
@@ -42,6 +44,8 @@ export const action: ActionFunction = async ({ request }) => {
 
 export default function Index() {
   const data = useActionData();
+  const loader_msg = useLoaderData();
+  console.log(loader_msg)
   useEffect(() => {
       greet();
   }, [])

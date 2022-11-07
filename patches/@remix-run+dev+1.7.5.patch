@@ -1,0 +1,182 @@
+diff --git a/node_modules/@remix-run/dev/dist/compiler/compilerServer.js b/node_modules/@remix-run/dev/dist/compiler/compilerServer.js
+index fc9b1e2..397d1af 100644
+--- a/node_modules/@remix-run/dev/dist/compiler/compilerServer.js
++++ b/node_modules/@remix-run/dev/dist/compiler/compilerServer.js
+@@ -23,6 +23,7 @@ var emptyModulesPlugin = require('./plugins/emptyModulesPlugin.js');
+ var mdx = require('./plugins/mdx.js');
+ var serverAssetsManifestPlugin = require('./plugins/serverAssetsManifestPlugin.js');
+ var serverBareModulesPlugin = require('./plugins/serverBareModulesPlugin.js');
++var nativeNodeModules = require('./plugins/nativeNodeModules.js');
+ var serverEntryModulePlugin = require('./plugins/serverEntryModulePlugin.js');
+ var serverRouteModulesPlugin = require('./plugins/serverRouteModulesPlugin.js');
+ var urlImportsPlugin = require('./plugins/urlImportsPlugin.js');
+@@ -71,6 +72,10 @@ const createEsbuildConfig = (config, assetsManifestChannel, options) => {
+     plugins.unshift(nodeModulesPolyfill.NodeModulesPolyfillPlugin());
+   }
+ 
++  if (config.serverPlatform == "node") {
++    plugins.unshift(nativeNodeModules.nativeNodeModulesPlugin());
++  }
++
+   return {
+     absWorkingDir: config.rootDirectory,
+     stdin,
+@@ -131,7 +136,18 @@ async function writeServerBuildResult(config, outputFiles) {
+       let contents = Buffer.from(file.contents).toString("utf-8");
+       contents = contents.replace(/"route:/gm, '"');
+       await fse__namespace.writeFile(file.path, contents);
+-    } else {
++    } else if (file.path.endsWith(".node")) {
++      // Check for and make _assets folder if it does not exist in the directory
++      // I suspect this is usually done elsewhere
++      let parentFolderPath = file.path.slice(0, file.path.lastIndexOf("/"))
++      if (!fse.existsSync(parentFolderPath)) {
++        fse.mkdirSync(parentFolderPath, { recursive: true });
++      }
++
++      // Write the binary .node file to the same path and with the same contents as expected
++      await fse__namespace.writeFile(file.path, file.contents)
++    }
++    else {
+       let assetPath = path__namespace.join(config.assetsBuildDirectory, file.path.replace(path__namespace.dirname(config.serverBuildPath), ""));
+       await fse__namespace.ensureDir(path__namespace.dirname(assetPath));
+       await fse__namespace.writeFile(assetPath, file.contents);
+@@ -144,7 +160,8 @@ const createServerCompiler = (remixConfig, options) => {
+     let esbuildConfig = createEsbuildConfig(remixConfig, manifestChannel, options);
+     let {
+       outputFiles
+-    } = await esbuild__namespace.build({ ...esbuildConfig,
++    } = await esbuild__namespace.build({
++      ...esbuildConfig,
+       write: false
+     });
+     await writeServerBuildResult(remixConfig, outputFiles);
+diff --git a/node_modules/@remix-run/dev/dist/compiler/loaders.js b/node_modules/@remix-run/dev/dist/compiler/loaders.js
+index 1b98520..4c197ba 100644
+--- a/node_modules/@remix-run/dev/dist/compiler/loaders.js
++++ b/node_modules/@remix-run/dev/dist/compiler/loaders.js
+@@ -63,6 +63,7 @@ const loaders = {
+   ".ts": "ts",
+   ".tsx": "tsx",
+   ".ttf": "file",
++  ".wasm": "file",
+   ".wav": "file",
+   ".webm": "file",
+   ".webmanifest": "file",
+diff --git a/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.d.ts b/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.d.ts
+new file mode 100644
+index 0000000..d51dc9b
+--- /dev/null
++++ b/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.d.ts
+@@ -0,0 +1,2 @@
++import type { Plugin } from "esbuild";
++export declare function nativeNodeModulesPlugin(): Plugin;
+\ No newline at end of file
+diff --git a/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.js b/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.js
+new file mode 100644
+index 0000000..dd831f3
+--- /dev/null
++++ b/node_modules/@remix-run/dev/dist/compiler/plugins/nativeNodeModules.js
+@@ -0,0 +1,86 @@
++Object.defineProperty(exports, '__esModule', { value: true });
++var path = require('path');
++
++function _interopNamespace(e) {
++    if (e && e.__esModule) return e;
++    var n = Object.create(null);
++    if (e) {
++        Object.keys(e).forEach(function (k) {
++            if (k !== 'default') {
++                var d = Object.getOwnPropertyDescriptor(e, k);
++                Object.defineProperty(n, k, d.get ? d : {
++                    enumerable: true,
++                    get: function () { return e[k]; }
++                });
++            }
++        });
++    }
++    n["default"] = e;
++    return Object.freeze(n);
++}
++
++var path__namespace = /*#__PURE__*/_interopNamespace(path);
++
++function nativeNodeModulesPlugin() {
++    return {
++        name: "native-node-modules",
++
++        setup(build) {
++            // If a ".node" file is imported within a module in the "file" namespace, resolve
++            // it to an absolute path and put it into the "node-file" virtual namespace.
++            build.onResolve({
++                filter: /\.node$/,
++                namespace: "file"
++            }, args => {
++                // Let's convert the path to an absolute path.
++                let resolved = path__namespace.resolve(args.resolveDir, args.path)
++                return (
++                    {
++                        path: resolved,
++                        namespace: "node-file"
++                    }
++                )
++            }); // Files in the "node-file" virtual namespace call "require()" on the
++            // path from esbuild of the ".node" file in the output directory.
++
++            build.onLoad({
++                filter: /.*/,
++                namespace: "node-file"
++            }, args => {
++                let projectRoot = path.resolve();
++                return ({
++                    contents: `
++        import * as path from "path";
++        import modulePath from ${JSON.stringify(args.path)}
++
++        let projectRoot = "${path__namespace.resolve()}";
++        let absolutePath = path.join(projectRoot, modulePath);
++
++        try { module.exports = require(absolutePath); 
++    }
++        catch (error) {
++            console.log("Node Module Loading Error:", error)
++        }
++      `
++                })
++            }); // If a ".node" file is imported within a module in the "node-file" namespace, put
++            // it in the "file" namespace where esbuild's default loading behavior will handle
++            // it. It is already an absolute path since we resolved it to one above.
++
++            build.onResolve({
++                filter: /\.node$/,
++                namespace: "node-file"
++            }, args => ({
++                path: args.path,
++                namespace: "file"
++            })); // Tell esbuild's default loading behavior to use the "file" loader for
++            // these ".node" files.
++
++            let opts = build.initialOptions;
++            opts.loader = opts.loader || {};
++            opts.loader[".node"] = "file";
++        }
++
++    };
++}
++exports.nativeNodeModulesPlugin = nativeNodeModulesPlugin;
+\ No newline at end of file
+diff --git a/node_modules/@remix-run/dev/dist/modules.d.ts b/node_modules/@remix-run/dev/dist/modules.d.ts
+index 87516fe..2f4582c 100644
+--- a/node_modules/@remix-run/dev/dist/modules.d.ts
++++ b/node_modules/@remix-run/dev/dist/modules.d.ts
+@@ -85,6 +85,10 @@ declare module "*.ttf" {
+     let asset: string;
+     export default asset;
+ }
++declare module "*.wasm" {
++    let asset: string;
++    export default asset;
++}
+ declare module "*.wav" {
+     let asset: string;
+     export default asset;
